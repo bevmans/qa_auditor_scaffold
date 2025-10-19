@@ -1,0 +1,67 @@
+
+-- Users (one row per HS account we connect)
+CREATE TABLE IF NOT EXISTS hs_accounts (
+  id SERIAL PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now(),
+  hs_account_id TEXT,
+  hs_email TEXT,
+  access_token TEXT,
+  refresh_token TEXT,
+  token_expires_at TIMESTAMP
+);
+
+-- Conversations (parent)
+CREATE TABLE IF NOT EXISTS conversations (
+  id SERIAL PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now(),
+  hs_conversation_id BIGINT UNIQUE,
+  mailbox_id BIGINT,
+  subject TEXT,
+  customer_email TEXT,
+  status TEXT,
+  created TIMESTAMP,
+  closed TIMESTAMP,
+  last_updated TIMESTAMP
+);
+
+-- Messages (child - thread items)
+CREATE TABLE IF NOT EXISTS messages (
+  id SERIAL PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now(),
+  hs_conversation_id BIGINT,
+  hs_message_id BIGINT,
+  author TEXT,
+  body TEXT,
+  body_plain TEXT,
+  created TIMESTAMP,
+  CONSTRAINT fk_convo FOREIGN KEY (hs_conversation_id) REFERENCES conversations (hs_conversation_id) ON DELETE CASCADE
+);
+
+-- Scores (per message, extend as needed)
+CREATE TABLE IF NOT EXISTS qa_scores (
+  id SERIAL PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT now(),
+  hs_message_id BIGINT,
+  hs_conversation_id BIGINT,
+  rubric_version TEXT DEFAULT 'v1',
+  empathy NUMERIC,
+  accuracy NUMERIC,
+  tone NUMERIC,
+  resolution NUMERIC,
+  total NUMERIC,
+  reasoning TEXT
+);
+
+-- Simple key-value store (for feature flags, cursor positions, etc.)
+CREATE TABLE IF NOT EXISTS kv_store (
+  k TEXT PRIMARY KEY,
+  v TEXT
+);
+
+-- === v2 additions ===
+ALTER TABLE IF NOT EXISTS messages ADD COLUMN IF NOT EXISTS agent_name TEXT;
+ALTER TABLE IF NOT EXISTS messages ADD COLUMN IF NOT EXISTS agent_email TEXT;
+-- kv_store already exists; rubric weights are stored under key 'rubric_weights' (JSON)

@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-qa_auditor}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # no host ports (internal-only)
+
+  redis:
+    image: redis:7
+    # no host ports (internal-only)
+
+  api:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    command: uvicorn api_server:app --host 0.0.0.0 --port 8000 --reload
+    working_dir: /code/app
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      HELPSCOUT_MAILBOX_ALLOWLIST: "134237,149975,260739"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8001:8000"   # host 8001 -> container 8000
+
+  web:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    command: streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    working_dir: /code/app
+    env_file:
+      - .env
+    environment:
+      API_BASE: ${API_BASE:-http://api:8000}
+      HELPSCOUT_MAILBOX_ALLOWLIST: "134237,149975,260739"
+    depends_on:
+      api:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8502:8501"   # host 8502 -> container 8501
+
+  worker:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    command: rq worker -u ${REDIS_URL} qa_jobs
+    working_dir: /code/app
+    env_file:
+      - .env
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      HELPSCOUT_MAILBOX_ALLOWLIST: "134237,149975,260739"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  pgdata:
